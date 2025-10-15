@@ -28,8 +28,7 @@
         // LLM Configuration - Stable Text Generation
         const MODEL_NAME = "gemini-2.5-flash-preview-05-20";
         
-        // *** ACTION REQUIRED: PASTE YOUR DEDICATED GEMINI API KEY HERE (from Cloud Console) ***
-        // THIS KEY MUST BE DIFFERENT FROM YOUR FIREBASE API KEY
+        // *** YOUR DEDICATED GEMINI API KEY ***
         const GEMINI_API_KEY = "AIzaSyCwAzcGGVqq1ZtL3Qi0dzqwDnH8V1NBiRQ"; 
         
         // Construct the API URL using the dedicated key
@@ -40,7 +39,6 @@
 
         /**
          * Parses the coach name and email from the raw text response.
-         * This function is needed because we are not using structured JSON anymore.
          */
         function extractEmailAndName(responseText) {
             const result = { coachName: 'N/A', email: 'N/A' };
@@ -68,8 +66,6 @@
 
         /**
          * Converts citations from the Gemini response into a clean HTML list.
-         * @param {Array} attributions - The grounding attributions array.
-         * @returns {string} - HTML string for the citations.
          */
         function formatCitations(attributions) {
             if (!attributions || attributions.length === 0) return '';
@@ -126,6 +122,7 @@
 
         /**
          * Uses the Gemini API and Google Search tool to find URL (if name given) and extract key player data.
+         * Note: This function is still needed to set the profile data and provide visual feedback.
          */
         async function loadPlayerProfile() {
             const searchInput = document.getElementById('player-search-input');
@@ -314,7 +311,7 @@
                     let sources = [];
 
                     const groundingMetadata = candidate.groundingMetadata;
-                    // FIX: Changed groundingAttributions to groundingMetadata.groundingAttributions
+                    // FIX: This check is now correct
                     if (groundingMetadata && groundingMetadata.groundingAttributions) {
                         sources = groundingMetadata.groundingAttributions
                             .map(attribution => ({
@@ -578,13 +575,27 @@
                  return;
             }
 
+            // --- FIX: PRIORITIZE MANUAL INPUT FOR DRAFT GENERATION ---
+            const currentManualName = document.getElementById('manual-name').value.trim();
+            const currentManualTeam = document.getElementById('manual-team').value.trim();
+            const currentManualGradYear = document.getElementById('manual-grad-year').value.trim();
+            const currentManualPositions = document.getElementById('manual-positions').value.trim();
+            const currentManualGPA = document.getElementById('manual-gpa').value.trim();
+
+            let draftProfileContext = playerProfileData; // Default to loaded API data
+
+            if (currentManualName || currentManualTeam || currentManualGradYear || currentManualPositions || currentManualGPA) {
+                // If any manual field is filled, OVERRIDE the context with fresh manual data
+                draftProfileContext = `Player Name: ${currentManualName || 'N/A'}. Travel Team: ${currentManualTeam || 'N/A'}. Graduation Year: ${currentManualGradYear || 'N/A'}. Positions: ${currentManualPositions || 'N/A'}. GPA: ${currentManualGPA || 'N/A'}.`;
+                emailStatus.innerHTML = '<p class="text-sm text-yellow-600 font-semibold">Generating draft using manual profile data...</p>';
+            }
 
             const schoolNames = selectedContacts.map(c => c.schoolName).join(', ');
             
             let profileContext = "";
-            if (playerProfileData) {
+            if (draftProfileContext) {
                 // If profile data exists (either manual or API), use it
-                profileContext = `The player's key profile information is: ${playerProfileData}. Use these details to personalize the email and make it sound authentic and impressive.`;
+                profileContext = `The player's key profile information is: ${draftProfileContext}. Use these details to personalize the email and make it sound authentic and impressive.`;
             }
 
             // Updated prompt to include profile context
