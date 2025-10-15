@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Kansas Softball Recruitment Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        // --- Firebase Imports ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        // Set Firebase Log Level for debugging
+        setLogLevel('Debug');
+
+        // Global Firebase variables
+        let app;
+        let db;
+        let auth;
+        let userId = null;
+        let appId = null;
+        let allSearches = []; // Global storage for all fetched history
+        let selectedContacts = []; // List of contacts for the email blast
+        let playerProfileData = null; // Global storage for profile data (NEW)
+
+        // LLM Configuration - Stable Text Generation
+        const MODEL_NAME = "gemini-2.5-flash-preview-05-20";
+        const apiKey = ""; // Canvas environment automatically provides this
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
+
+        // --- Utility Functions ---
+
+        /**
+         * Parses the coach name and email from the raw text response.
+         * This function is needed because we are not using structured JSON anymore.
+         */
+        function extractEmailAndName(responseText) {
+            const result = { coachName: 'N/A', email: 'N/A' };
+            
+            // Regex to find Email: or Coach Name: lines in the text response
+            const emailMatch = responseText.match(/Email:\s*(.*?)(?:\n|$)/i);
+            if (emailMatch && emailMatch[1]) {
+                const email = emailMatch[1].trim().replace(/['"`]/g, ''); // Clean up quotes
+                if (email !== 'N/A' && email.includes('@')) {
+                    result.email = email;
+                }
+            }
+
+            const nameMatch = responseText.match(/Coach Name:\s*(.*?)(?:\n|$)/i);
+            if (nameMatch && nameMatch[1]) {
+                const name = nameMatch[1].trim().replace(/['"`]/g, ''); // Clean up quotes
+                if (name !== 'N/A') {
+                    result.coachName = name;
+                }
+            }
+
+            return result;
+        }
+
+
+        /**
+         * Converts citations from the Gemini response into a clean HTML list.
+         * @param {Array} attributions - The grounding attributions array.
+         * @returns {string} - HTML string for the citations.
+         */
+        function formatCitations(attributions) {
+            if (!attributions || attributions.length === 0) return '';
+
+            const listItems = attributions.map(attr => {
+                if (attr.web && attr.web.uri) {
+                    return `
+                        <li>
+                            <a href="${attr.web.uri}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out">
+                                ${attr.web.title || 'Source Link'}
+                            </a>
+                        </li>
+                    `;
+                }
+                return '';
+            }).join('');
+
+            return `
+                <div class="mt-4 pt-2 border-t border-gray-100">
+                    <p class="text-xs font-semibold text-gray-500 mb-1">Sources Grounded By Google Search:</p>
+                    <ul class="list-disc list-inside text-gray-600 space-y-1 pl-4">
+                        ${listItems}
+                    </ul>
+                </div>
+            `;
+        }
+
+        /**
+         * Retries the fetch operation with exponential backoff.
+         */
+        async function fetchWithBackoff(url, options, retries = 5) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status === 429 && i < retries - 1) {
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+                    if (!response.ok) {
+                        // Throw the error with the status code for better debugging
+                        throw new Error(`API response error: ${response.status} ${response.statusText}`);
+                    }
+                    return response;
+                } catch (error) {
+                    if (i === retries - 1) throw error;
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        // --- NEW: Profile Loading Logic (Using Gemini API for stability) ---
+
+        /**
+         * Uses the Gemini API and Google Search tool to extract key player data from the FieldLevel URL.
+         */
+        async function loadPlayerProfile() {
+            const urlInput = document.getElementById('fieldlevel-url');
+            const profileStatus = document.getElementById('profile-status');
+            const loadBtn = document.getElementById('load-profile-btn');
+            const profileUrl = urlInput.value.trim();
+
+            if (!profileUrl) {
+                profileStatus.innerHTML = '<span class="text-red-500 font-semibold">Please enter a valid FieldLevel URL.</span>';
+                return;
+            }
+
+            profileStatus.innerHTML = '<span class="text-yellow-600 font-semibold">Loading and analyzing profile... (This may take a moment)</span>';
+            loadBtn.disabled = true;
+            playerProfileData = null; // Clear previous data
+
+            // 1. System Instruction for extraction
+            const systemInstruction = "You are a data extraction specialist. Your task is to visit the provided recruitment URL and extract the key athletic and academic details of the player. You must present the extracted data as a concise, formatted list of facts, ready to be inserted into an email.";
+            
+            // 2. User Query instructing the action and providing the URL
+            const userQuery = `Visit this FieldLevel profile URL: ${profileUrl}. From the content, extract the Player's Full Name, Graduation Year, Primary Position, Key Academic Stats (e.g., GPA), and 1-2 major athletic highlights or metrics (e.g., batting average, velocity). Format this as a concise paragraph or bulleted list.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                // Use Google Search tool, which can now use the URL context
+                tools: [{ "google_search": {} }], 
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+            };
+
+            try {
+                const response = await fetchWithBackoff(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                const responseText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                
+                if (responseText) {
+                    playerProfileData = responseText; // Store the extracted text
+                    profileStatus.innerHTML = `
+                        <span class="text-amber-600 font-semibold">Profile Loaded Successfully!</span>
+                        <div class="mt-2 p-3 bg-amber-50 rounded-lg border border-amber-200 text-sm shadow-inner">
+                            <p class="font-medium mb-1">Details Extracted:</p>
+                            <div class="prose text-gray-700">${marked.parse(playerProfileData)}</div>
+                        </div>
+                    `;
+                } else {
+                    playerProfileData = null;
+                    profileStatus.innerHTML = '<span class="text-red-500 font-semibold">Could not extract data from the profile URL. Empty response.</span>';
+                }
+
+            } catch (error) {
+                console.error("Gemini API/Profile Extraction Error:", error);
+                playerProfileData = null;
+                profileStatus.innerHTML = `<span class="text-red-500 font-semibold">Error during profile extraction (Code: ${error.message}). Please ensure the URL is publicly accessible.</span>`;
+            } finally {
+                loadBtn.disabled = false;
+            }
+        }
+
+
+        // --- Core Application Logic: Search & Save ---
+
+        /**
+         * Calls the Gemini API to find recruiting information, expecting text output.
+         */
+        async function fetchRecruitingInfo(schoolName) {
+            const resultDiv = document.getElementById('search-result');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const searchButton = document.getElementById('search-button');
+
+            resultDiv.innerHTML = '';
+            loadingIndicator.classList.remove('hidden');
+            searchButton.disabled = true;
+            searchButton.textContent = 'Searching...';
+            
+            console.log("Attempting Gemini API call to URL structure:", API_URL);
+
+            // Simple text-based query (stable)
+            const userQuery = `Find the Head Softball Coach's name, recruiting email address, phone number, and the official university softball program's recruitment link for "${schoolName}". List this information clearly with titles (Coach Name:, Email:, Phone:, Recruitment Link:).`;
+
+            const systemInstruction = "You are a specialized Sports Recruitment Assistant. Use Google Search to find current, publicly available contact information for college softball coaches and recruitment links. Respond concisely with the requested information.";
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                tools: [{ "google_search": {} }],
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+            };
+
+            try {
+                const response = await fetchWithBackoff(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    const responseText = candidate.content.parts[0].text;
+                    let sources = [];
+
+                    const groundingMetadata = candidate.groundingMetadata;
+                    if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                        sources = groundingMetadata.groundingAttributions
+                            .map(attribution => ({
+                                uri: attribution.web?.uri,
+                                title: attribution.web?.title,
+                            }))
+                            .filter(source => source.uri && source.title);
+                    }
+
+                    // Save the raw text response and sources to Firestore
+                    await saveSearchResult(schoolName, userQuery, responseText, sources);
+
+                    displaySearchResult(schoolName, responseText, sources, 'blue');
+
+                } else {
+                    // Scenario 2: LLM returned empty or malformed candidate structure
+                    console.error("LLM candidate or text part missing from API response:", result);
+                    resultDiv.innerHTML = `<div class="p-6 bg-red-100 rounded-xl shadow-lg border border-red-400 text-red-700"><strong>Search Failed (Code 2):</strong> The AI could not find relevant information or returned an empty response. Try a more common school name.</div>`;
+                }
+
+            } catch (error) {
+                // Scenario 1: Hard network failure or API error (e.g., 500, 400, 401)
+                console.error("Gemini API/Network Error:", error);
+                resultDiv.innerHTML = `<div class="p-6 bg-red-100 rounded-xl shadow-lg border border-red-400 text-red-700"><strong>Connection Failed (Code 1):</strong> An error occurred while contacting the search service: ${error.message}</div>`;
+            } finally {
+                loadingIndicator.classList.add('hidden');
+                searchButton.disabled = false;
+                searchButton.textContent = 'Search School';
+            }
+        }
+
+        /**
+         * Renders the search result to the UI using simple Markdown and adds the email button.
+         */
+        function displaySearchResult(schoolName, responseText, sources, borderColor) {
+            const resultDiv = document.getElementById('search-result');
+            
+            // Extract email and name for the Add button
+            const contactInfo = extractEmailAndName(responseText);
+            
+            // Use marked.js to convert the plain text (which is naturally Markdown) to HTML
+            const formattedContent = marked.parse(responseText);
+
+            resultDiv.innerHTML = `
+                <div class="p-6 bg-white border border-${borderColor}-200 rounded-xl shadow-lg">
+                    <h3 class="text-xl font-bold text-gray-800 mb-3">${schoolName} Recruitment Info</h3>
+                    
+                    <div class="prose max-w-none text-gray-700">
+                        ${formattedContent}
+                    </div>
+
+                    ${formatCitations(sources)}
+
+                    <button id="add-contact-btn" class="mt-6 w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2 rounded-lg transition duration-150 shadow-md disabled:opacity-50"
+                        ${contactInfo.email === 'N/A' || !contactInfo.email.includes('@') ? 'disabled' : ''}>
+                        ${contactInfo.email === 'N/A' || !contactInfo.email.includes('@') ? 'Email Required to Add' : 'Add to Email Draft List'}
+                    </button>
+                </div>
+            `;
+            
+            // Add click listener for the new button
+            if (contactInfo.email.includes('@')) {
+                const contact = {
+                    schoolName: schoolName,
+                    coachName: contactInfo.coachName,
+                    email: contactInfo.email,
+                    id: Math.random().toString(36).substring(2, 9) // Unique ID for draft tracking
+                };
+                document.getElementById('add-contact-btn').addEventListener('click', () => addContactToDraftList(contact));
+            }
+        }
+
+
+        // --- Firestore History Logic ---
+
+        /**
+         * Saves the search result to a public Firestore collection.
+         */
+        async function saveSearchResult(schoolName, query, responseText, sources) {
+            if (!db || !userId) {
+                console.error("Firestore not initialized or user not logged in.");
+                return;
+            }
+            try {
+                const collectionPath = `/artifacts/${appId}/public/data/recruiting_searches`;
+                await addDoc(collection(db, collectionPath), {
+                    schoolName: schoolName,
+                    query: query,
+                    responseText: responseText, // Store the raw text response
+                    sources: sources,
+                    timestamp: serverTimestamp(),
+                    addedByUserId: userId 
+                });
+                console.log("Search result successfully saved to public Firestore collection.");
+            } catch (e) {
+                console.error("Error adding document: ", e);
+            }
+        }
+
+        /**
+         * Renders the history list based on the current filter setting.
+         */
+        function renderHistoryList() {
+            const historyList = document.getElementById('history-list');
+            const filterValue = document.getElementById('history-filter').value;
+
+            // 1. Apply Filter
+            const filteredSearches = allSearches.filter(search => {
+                if (filterValue === 'all') {
+                    return true;
+                }
+                if (filterValue === 'my') {
+                    return search.addedByUserId === userId;
+                }
+                return true;
+            });
+
+            // 2. Render List Items
+            historyList.innerHTML = filteredSearches.map(search => {
+                const date = search.timestamp ? new Date(search.timestamp.seconds * 1000).toLocaleDateString() : 'N/A';
+                const displayId = search.addedByUserId ? search.addedByUserId.substring(0, 4) : 'Unknown';
+                const isMySearch = search.addedByUserId === userId ? ' (You)' : '';
+                const borderColor = search.addedByUserId === userId ? 'border-amber-400' : 'border-gray-100';
+
+
+                return `
+                    <div class="p-3 bg-white hover:bg-gray-50 transition duration-150 ease-in-out rounded-lg shadow-sm border-l-4 ${borderColor} mb-2 cursor-pointer" onclick="displaySavedResult('${search.id}')">
+                        <p class="font-semibold text-blue-600">${search.schoolName}</p>
+                        <p class="text-xs text-gray-500">By: <span class="font-mono text-gray-700">${displayId}</span>${isMySearch} | ${date}</p>
+                    </div>
+                `;
+            }).join('');
+            
+            if (filteredSearches.length === 0) {
+                 historyList.innerHTML = `<p class="text-sm text-gray-400 p-2">No searches found for this filter.</p>`;
+            }
+        }
+
+
+        /**
+         * Sets up a real-time listener for the team's public recruiting search history.
+         */
+        function setupHistoryListener() {
+            if (!db || !userId) {
+                console.error("History Listener setup failed: Firestore not ready.");
+                return;
+            }
+
+            const collectionPath = `/artifacts/${appId}/public/data/recruiting_searches`;
+            const q = query(collection(db, collectionPath));
+
+            onSnapshot(q, (snapshot) => {
+                const searches = [];
+                snapshot.forEach((doc) => {
+                    searches.push({ id: doc.id, ...doc.data() });
+                });
+
+                searches.sort((a, b) => b.timestamp?.seconds - a.timestamp?.seconds);
+
+                allSearches = searches;
+                renderHistoryList();
+            });
+
+            document.getElementById('history-filter').addEventListener('change', renderHistoryList);
+        }
+
+        /**
+         * Loads a saved result and displays it.
+         */
+        window.displaySavedResult = (id) => {
+            const search = allSearches.find(s => s.id === id);
+
+            if (search) {
+                displaySearchResult(search.schoolName, search.responseText, search.sources, 'amber');
+            }
+        };
+
+        // --- Email Draft Functions ---
+
+        /**
+         * Adds a contact to the list for the email blast.
+         */
+        function addContactToDraftList(contact) {
+            // Check if email is valid
+            if (!contact.email || !contact.email.includes('@')) {
+                return; 
+            }
+
+            // Prevent duplicates based on school name
+            if (selectedContacts.some(c => c.schoolName === contact.schoolName)) {
+                document.getElementById('email-status').innerHTML = '<p class="text-sm text-red-500 font-semibold">That school is already in your list!</p>';
+                setTimeout(() => document.getElementById('email-status').innerHTML = '', 3000);
+                return;
+            }
+
+            selectedContacts.push(contact);
+            updateDraftListUI();
+        }
+
+        /**
+         * Removes a contact from the list.
+         */
+        window.removeContact = (id) => {
+            selectedContacts = selectedContacts.filter(c => c.id !== id);
+            updateDraftListUI();
+        }
+
+        /**
+         * Updates the UI for the email draft list and enables/disables buttons.
+         */
+        function updateDraftListUI() {
+            const listDiv = document.getElementById('selected-contacts-list');
+            const sendBtn = document.getElementById('send-email-btn');
+            const generateBtn = document.getElementById('generate-draft-btn');
+            
+            if (selectedContacts.length === 0) {
+                listDiv.innerHTML = '<p class="text-sm text-gray-500 italic pt-2">Add schools from the search results to start a blast.</p>';
+                sendBtn.disabled = true;
+                generateBtn.disabled = true;
+            } else {
+                listDiv.innerHTML = selectedContacts.map(c => `
+                    <div class="flex justify-between items-center bg-white p-2 rounded-lg border border-gray-200">
+                        <span class="text-sm font-medium text-gray-700">${c.schoolName} (${c.coachName.split(' ')[0]})</span>
+                        <button onclick="removeContact('${c.id}')" class="text-red-500 hover:text-red-700 transition duration-150 text-lg">
+                            &times;
+                        </button>
+                    </div>
+                `).join('');
+                
+                sendBtn.disabled = false;
+                generateBtn.disabled = false;
+            }
+
+            document.getElementById('contact-count').textContent = selectedContacts.length;
+        }
+
+        /**
+         * Calls Gemini to generate an authentic email draft using simple text output, incorporating profile data.
+         */
+        async function generateEmailDraft() {
+            const draftSubjectInput = document.getElementById('draft-subject');
+            const draftBodyInput = document.getElementById('draft-body');
+            const generateBtn = document.getElementById('generate-draft-btn');
+            const emailStatus = document.getElementById('email-status');
+
+            emailStatus.innerHTML = '<p class="text-sm text-blue-600 font-semibold">Generating authentic email draft...</p>';
+            generateBtn.disabled = true;
+
+            const schoolNames = selectedContacts.map(c => c.schoolName).join(', ');
+            
+            let profileContext = "";
+            if (playerProfileData) {
+                profileContext = `The player's key profile information is: ${playerProfileData}. Use these details to personalize the email and make it sound authentic and impressive.`;
+            }
+
+            // Updated prompt to include profile context
+            const userQuery = `Write a recruitment email from a 14-year-old softball player. ${profileContext} The email should be enthusiastic, polite, and mention her interest in the schools: ${schoolNames}. The output MUST be in two sections: "SUBJECT:" followed by the subject line, and "BODY:" followed by the email body. Use a conversational, slightly informal tone suitable for a motivated 14-year-old.`;
+            
+            const systemInstruction = "You are a creative writing assistant specialized in crafting authentic, age-appropriate correspondence. You MUST structure your entire response with 'SUBJECT:' and 'BODY:' sections only. Do not add any other introductory or concluding text.";
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+            };
+
+            try {
+                const response = await fetchWithBackoff(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                const responseText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                
+                if (responseText) {
+                    // Manually parse SUBJECT and BODY from the plain text
+                    const subjectMatch = responseText.match(/SUBJECT:\s*([\s\S]*?)(?=BODY:|$)/i);
+                    const bodyMatch = responseText.match(/BODY:\s*([\s\S]*)/i);
+
+                    const subject = subjectMatch ? subjectMatch[1].trim() : "Recruiting Inquiry";
+                    const body = bodyMatch ? bodyMatch[1].trim() : "Could not generate email body.";
+                    
+                    draftSubjectInput.value = subject;
+                    draftBodyInput.value = body;
+
+                    emailStatus.innerHTML = '<p class="text-sm text-amber-600 font-semibold">Draft generated successfully! Review and send.</p>';
+                } else {
+                    emailStatus.innerHTML = '<p class="text-sm text-red-500 font-semibold">Failed to generate email draft: Empty response.</p>';
+                }
+
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                emailStatus.innerHTML = `<p class="text-sm text-red-500 font-semibold">Error generating draft: ${error.message}</p>`;
+            } finally {
+                generateBtn.disabled = false;
+            }
+        }
+
+        /**
+         * Prepares and executes the mailto blast.
+         */
+        window.sendEmailBlast = () => {
+            if (selectedContacts.length === 0) {
+                document.getElementById('email-status').innerHTML = '<p class="text-sm text-red-500 font-semibold">Please add schools to the list first.</p>';
+                return;
+            }
+
+            const subject = document.getElementById('draft-subject').value;
+            const body = document.getElementById('draft-body').value;
+            
+            if (!subject || !body) {
+                document.getElementById('email-status').innerHTML = '<p class="text-sm text-red-500 font-semibold">Subject and Body cannot be empty.</p>';
+                return;
+            }
+            
+            // 1. Get all unique email addresses for the 'To' field
+            const toEmails = selectedContacts
+                .map(c => c.email)
+                .filter(email => email && email.includes('@'))
+                .join(',');
+            
+            if (!toEmails) {
+                document.getElementById('email-status').innerHTML = '<p class="text-sm text-red-500 font-semibold">No valid emails found in the list.</p>';
+                return;
+            }
+
+            // 2. Format the body content for URL encoding (important for mailto: links)
+            const encodedSubject = encodeURIComponent(subject);
+            const encodedBody = encodeURIComponent(body);
+            
+            // 3. Construct the mailto link
+            const mailtoLink = `mailto:${toEmails}?subject=${encodedSubject}&body=${encodedBody}`;
+
+            // 4. Open the user's default email client
+            window.location.href = mailtoLink;
+        };
+
+
+        // --- Initialization ---
+
+        document.addEventListener('DOMContentLoaded', () => {
+            appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+            const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+            if (!firebaseConfig) {
+                console.error("Firebase configuration not found. Cannot initialize Firestore.");
+                document.getElementById('search-result').innerHTML = `<p class="text-red-500">Error: Firebase config missing.</p>`;
+                return;
+            }
+
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                    document.getElementById('user-id-display').textContent = `Your Player ID: ${userId}`;
+                    setupHistoryListener();
+                } else {
+                    try {
+                        if (initialAuthToken) {
+                            const userCredential = await signInWithCustomToken(auth, initialAuthToken);
+                            userId = userCredential.user.uid;
+                        } else {
+                            const userCredential = await signInAnonymously(auth);
+                            userId = userCredential.user.uid;
+                        }
+                        document.getElementById('user-id-display').textContent = `Your Player ID: ${userId}`;
+                        setupHistoryListener();
+                    } catch (error) {
+                        console.error("Firebase Authentication Error:", error);
+                        document.getElementById('user-id-display').textContent = `Auth Failed: ${error.message}`;
+                    }
+                }
+            });
+
+            document.getElementById('search-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const schoolName = document.getElementById('school-name').value.trim();
+                if (schoolName) {
+                    fetchRecruitingInfo(schoolName);
+                } else {
+                    document.getElementById('search-result').innerHTML = `<p class="text-yellow-600 p-4 bg-yellow-100 rounded-lg">Please enter a school name to search!</p>`;
+                }
+            });
+
+            document.getElementById('generate-draft-btn').addEventListener('click', generateEmailDraft);
+            
+            // NEW: Profile button listener
+            document.getElementById('load-profile-btn').addEventListener('click', loadPlayerProfile);
+        });
+    </script>
+    <!-- Include marked.js for Markdown rendering (for citations/summaries) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        /* Custom styles for consistency */
+        .prose h1, .prose h2, .prose h3 {
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+            font-weight: 700;
+        }
+        .prose a {
+            color: #1d4ed8;
+            text-decoration: underline;
+        }
+        .prose ul, .prose ol {
+            padding-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans antialiased p-4">
+
+    <!-- Header & User ID -->
+    <header class="text-center py-6">
+        <h1 class="text-4xl font-extrabold text-blue-800 tracking-tight mb-2">
+            Team Kansas Softball Recruitment Tracker
+        </h1>
+        <p class="text-xl text-gray-600">Find Coach Contacts and Recruitment Links for Team Kansas Athletes, Powered by Gemini</p>
+        <p id="user-id-display" class="text-xs text-gray-400 mt-2 break-all"></p> 
+    </header>
+
+    <main class="max-w-7xl mx-auto flex flex-col lg:flex-row gap-6">
+
+        <!-- Left Column: Profile, Search Form & Results -->
+        <section class="lg:w-1/2 w-full space-y-6">
+
+            <!-- Player Profile Card (Kansas Accent: Amber) -->
+            <div id="player-profile-card" class="bg-white p-6 rounded-xl shadow-2xl border-t-4 border-amber-500">
+                <h2 class="text-2xl font-bold text-amber-800 mb-4 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-2 text-amber-500"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    Your Player Profile
+                </h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="fieldlevel-url" class="block text-sm font-medium text-gray-700 mb-1">FieldLevel Profile URL</label>
+                        <input type="url" id="fieldlevel-url" placeholder="e.g., https://www.fieldlevel.com/app/profile/..." class="w-full p-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition duration-150">
+                    </div>
+                    <button id="load-profile-btn" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition disabled:opacity-50">
+                        Load Profile Data
+                    </button>
+                    <div id="profile-status" class="text-sm text-gray-600 pt-2">No profile loaded. Enter URL and click 'Load'.</div>
+                </div>
+            </div>
+
+            <!-- Search Form Card (Kansas Accent: Blue) -->
+            <div class="bg-white p-6 rounded-xl shadow-2xl border-t-4 border-blue-600">
+                <form id="search-form" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="school-name" class="block text-sm font-medium text-gray-700 mb-1">School Name</label>
+                            <input type="text" id="school-name" required placeholder="Enter University/College Name" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                        </div>
+                        <div>
+                            <label for="sport" class="block text-sm font-medium text-gray-700 mb-1">Sport</label>
+                            <input type="text" id="sport" value="Softball" disabled class="w-full p-3 bg-gray-100 text-gray-500 border border-gray-300 rounded-lg cursor-not-allowed">
+                        </div>
+                    </div>
+                    <button type="submit" id="search-button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50">
+                        Search School
+                    </button>
+                </form>
+            </div>
+
+            <!-- Real-time Results Area -->
+            <div id="loading-indicator" class="hidden text-center p-6 bg-yellow-100 rounded-xl shadow-lg">
+                <svg class="animate-spin h-5 w-5 text-yellow-600 inline mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span class="text-yellow-700 font-semibold">Searching the web and analyzing results...</span>
+            </div>
+
+            <div id="search-result" class="min-h-[200px]">
+                <div class="p-6 text-center text-gray-500 bg-white rounded-xl shadow-lg border border-gray-200">
+                    Your search results will appear here. Click a history item on the right to view a saved result.
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Column: Email Draft and History -->
+        <section class="lg:w-1/2 w-full space-y-6">
+
+            <!-- Email Draft Card (Kansas Accent: Blue) -->
+            <div class="bg-gray-50 p-6 rounded-xl shadow-xl border-t-4 border-blue-700">
+                <h2 class="text-2xl font-bold text-blue-800 mb-4 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-2 text-blue-500"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                    Team Email Draft (<span id="contact-count">0</span> Contacts)
+                </h2>
+
+                <div class="mb-4 p-3 bg-blue-100 rounded-lg border border-blue-200">
+                    <p class="font-semibold text-blue-800 mb-1">Selected Contacts:</p>
+                    <div id="selected-contacts-list" class="space-y-1">
+                        <!-- Contacts will be injected here -->
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label for="draft-subject" class="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                        <input type="text" id="draft-subject" placeholder="Draft Subject Line" class="w-full p-2 border border-gray-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label for="draft-body" class="block text-sm font-medium text-gray-700 mb-1">Email Body</label>
+                        <textarea id="draft-body" rows="8" placeholder="The generated email draft will appear here..." class="w-full p-2 border border-gray-300 rounded-lg"></textarea>
+                    </div>
+                </div>
+                
+                <div id="email-status" class="h-6 mt-2 text-center"></div>
+
+                <div class="grid grid-cols-2 gap-4 mt-4">
+                    <button id="generate-draft-btn" disabled class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded-lg transition duration-300 shadow-md disabled:opacity-50">
+                        Generate 14-Year-Old Draft
+                    </button>
+                    <button onclick="sendEmailBlast()" id="send-email-btn" disabled class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition duration-300 shadow-md disabled:opacity-50">
+                        Send Email Blast
+                    </button>
+                </div>
+            </div>
+
+            <!-- History Section (Kansas Accent: Blue) -->
+            <div class="bg-gray-50 p-6 rounded-xl shadow-xl border-t-4 border-blue-400">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-2 text-gray-500"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    Team Kansas Search History
+                </h2>
+                
+                <!-- History Filter -->
+                <div class="mb-4">
+                    <label for="history-filter" class="block text-sm font-medium text-gray-700 mb-1">Filter by Player:</label>
+                    <select id="history-filter" class="w-full p-2 border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        <option value="all">All Team Searches</option>
+                        <option value="my">My Searches Only</option>
+                    </select>
+                </div>
+
+                <div id="history-list" class="space-y-2 max-h-[40vh] overflow-y-auto pr-2">
+                    <p class="text-sm text-gray-400">Loading saved searches...</p>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+</body>
+</html>
