@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Team Kansas Hays 14U College Search </title>
+    <title>Team Kansas Hays 14U Recruitment Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="module">
         // --- Firebase Imports ---
@@ -568,16 +568,38 @@
         // --- Initialization ---
 
         document.addEventListener('DOMContentLoaded', () => {
-            appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+            // Default App ID for deployment outside of the environment
+            appId = typeof __app_id !== 'undefined' ? __app_id : 'TeamKansasRecruiter'; 
+            
+            // --- CRITICAL FIX: Load Configuration ---
+            let firebaseConfig = null;
+            
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                // 1. Used when running inside the original development environment
+                firebaseConfig = JSON.parse(__firebase_config);
+            } else {
+                // 2. Used when deployed publicly (Netlify, Vercel, etc.)
+                // *** IMPORTANT: REPLACE THE VALUES BELOW WITH YOUR ACTUAL FIREBASE PROJECT CONFIG ***
+                firebaseConfig = {
+                    apiKey: "YOUR_API_KEY", 
+                    authDomain: "YOUR_AUTH_DOMAIN",
+                    projectId: "YOUR_PROJECT_ID", 
+                    storageBucket: "YOUR_STORAGE_BUCKET",
+                    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+                    appId: "YOUR_APP_ID"
+                };
+            }
+            
             const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-            if (!firebaseConfig) {
-                console.error("Firebase configuration not found. Cannot initialize Firestore.");
-                document.getElementById('search-result').innerHTML = `<p class="text-red-500">Error: Firebase config missing.</p>`;
+            // Check if the placeholder config is still empty/invalid
+            if (!firebaseConfig || firebaseConfig.apiKey === "YOUR_API_KEY") {
+                console.error("Firebase configuration not found or is still using placeholder values. Cannot initialize Firestore.");
+                document.getElementById('search-result').innerHTML = `<p class="text-red-500 font-bold p-4 bg-red-50 rounded-lg">CRITICAL ERROR: Firebase configuration is missing or invalid. Please follow the instructions to insert your project's credentials into the code.</p>`;
                 return;
             }
 
+            // Start Firebase App
             app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
@@ -593,6 +615,7 @@
                             const userCredential = await signInWithCustomToken(auth, initialAuthToken);
                             userId = userCredential.user.uid;
                         } else {
+                            // Fallback for public deployment
                             const userCredential = await signInAnonymously(auth);
                             userId = userCredential.user.uid;
                         }
@@ -645,7 +668,7 @@
     <!-- Header & User ID -->
     <header class="text-center py-6">
         <h1 class="text-4xl font-extrabold text-blue-800 tracking-tight mb-2">
-            Team Kansas Softball Recruitment Tracker
+            Team Kansas Hays 14U Recruitment Tracker
         </h1>
         <p class="text-xl text-gray-600">Find Coach Contacts and Recruitment Links for Team Kansas Athletes, Powered by Gemini</p>
         <p id="user-id-display" class="text-xs text-gray-400 mt-2 break-all"></p> 
@@ -776,4 +799,3 @@
 
 </body>
 </html>
-
