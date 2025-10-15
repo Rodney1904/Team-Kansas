@@ -47,22 +47,13 @@
                     result.email = email;
                 }
             }
-
-            const nameMatch = responseText.match(/Coach Name:\s*(.*?)(?:\n|$)/i);
-            if (nameMatch && nameMatch[1]) {
-                const name = nameMatch[1].trim().replace(/['"`]/g, ''); // Clean up quotes
-                if (name !== 'N/A') {
-                    result.coachName = name;
-                }
-            }
-
-            return result;
-        }
-
-
-        /**
-         * Converts citations from the Gemini response into a clean HTML list.
-         * @param {Array} attributions - The grounding attributions array.
+apiKey: "AIzaSyDgKqGsD8VZiUc83cJZlWdKt_2OIhw7b8Y",
+  authDomain: "team-kansas.firebaseapp.com",
+  projectId: "team-kansas",
+  storageBucket: "team-kansas.firebasestorage.app",
+  messagingSenderId: "295924240103",
+  appId: "1:295924240103:web:ae8e23ffdfd85279461c42",
+  measurementId: "G-PZ34WR4Y2B
          * @returns {string} - HTML string for the citations.
          */
         function formatCitations(attributions) {
@@ -799,3 +790,4 @@
 
 </body>
 </html>
+
