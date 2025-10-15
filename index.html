@@ -47,13 +47,22 @@
                     result.email = email;
                 }
             }
-apiKey: "AIzaSyDgKqGsD8VZiUc83cJZlWdKt_2OIhw7b8Y",
-  authDomain: "team-kansas.firebaseapp.com",
-  projectId: "team-kansas",
-  storageBucket: "team-kansas.firebasestorage.app",
-  messagingSenderId: "295924240103",
-  appId: "1:295924240103:web:ae8e23ffdfd85279461c42",
-  measurementId: "G-PZ34WR4Y2B
+
+            const nameMatch = responseText.match(/Coach Name:\s*(.*?)(?:\n|$)/i);
+            if (nameMatch && nameMatch[1]) {
+                const name = nameMatch[1].trim().replace(/['"`]/g, ''); // Clean up quotes
+                if (name !== 'N/A') {
+                    result.coachName = name;
+                }
+            }
+
+            return result;
+        }
+
+
+        /**
+         * Converts citations from the Gemini response into a clean HTML list.
+         * @param {Array} attributions - The grounding attributions array.
          * @returns {string} - HTML string for the citations.
          */
         function formatCitations(attributions) {
@@ -148,6 +157,7 @@ apiKey: "AIzaSyDgKqGsD8VZiUc83cJZlWdKt_2OIhw7b8Y",
                 });
                 
                 const result = await response.json();
+                console.log("Raw Gemini Profile Response:", result); // Debugging API response
                 const responseText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
                 
                 if (responseText) {
@@ -184,7 +194,8 @@ apiKey: "AIzaSyDgKqGsD8VZiUc83cJZlWdKt_2OIhw7b8Y",
             const loadingIndicator = document.getElementById('loading-indicator');
             const searchButton = document.getElementById('search-button');
 
-            resultDiv.innerHTML = '';
+            // 1. Initial UI Feedback
+            resultDiv.innerHTML = `<div class="p-4 text-center text-blue-600 bg-blue-50 rounded-lg">Starting search for ${schoolName}...</div>`;
             loadingIndicator.classList.remove('hidden');
             searchButton.disabled = true;
             searchButton.textContent = 'Searching...';
@@ -210,6 +221,7 @@ apiKey: "AIzaSyDgKqGsD8VZiUc83cJZlWdKt_2OIhw7b8Y",
                 });
 
                 const result = await response.json();
+                console.log("Raw Gemini Search Response:", result); // Debugging API response
                 const candidate = result.candidates?.[0];
 
                 if (candidate && candidate.content?.parts?.[0]?.text) {
@@ -490,6 +502,12 @@ apiKey: "AIzaSyDgKqGsD8VZiUc83cJZlWdKt_2OIhw7b8Y",
                 });
                 
                 const result = await response.json();
+                
+                if (result) {
+                    // Log the draft response for debugging
+                    console.log("Raw Gemini Draft Response:", result);
+                }
+                
                 const responseText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
                 
                 if (responseText) {
@@ -570,14 +588,15 @@ apiKey: "AIzaSyDgKqGsD8VZiUc83cJZlWdKt_2OIhw7b8Y",
                 firebaseConfig = JSON.parse(__firebase_config);
             } else {
                 // 2. Used when deployed publicly (Netlify, Vercel, etc.)
-                // *** IMPORTANT: REPLACE THE VALUES BELOW WITH YOUR ACTUAL FIREBASE PROJECT CONFIG ***
+                // *** IMPORTANT: YOUR UNIQUE FIREBASE PROJECT CONFIG IS NOW INSERTED BELOW ***
                 firebaseConfig = {
-                    apiKey: "YOUR_API_KEY", 
-                    authDomain: "YOUR_AUTH_DOMAIN",
-                    projectId: "YOUR_PROJECT_ID", 
-                    storageBucket: "YOUR_STORAGE_BUCKET",
-                    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-                    appId: "YOUR_APP_ID"
+                    apiKey: "AIzaSyDgKqGsD8VZiUc83cJZlWdKt_2OIhw7b8Y", 
+                    authDomain: "team-kansas.firebaseapp.com",
+                    projectId: "team-kansas", 
+                    storageBucket: "team-kansas.firebasestorage.app",
+                    messagingSenderId: "295924240103",
+                    appId: "1:295924240103:web:ae8e23ffdfd85279461c42",
+                    // measurementId: "G-PZ34WR4Y2B" // Not needed for core function
                 };
             }
             
@@ -790,4 +809,3 @@ apiKey: "AIzaSyDgKqGsD8VZiUc83cJZlWdKt_2OIhw7b8Y",
 
 </body>
 </html>
-
