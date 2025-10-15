@@ -27,8 +27,14 @@
 
         // LLM Configuration - Stable Text Generation
         const MODEL_NAME = "gemini-2.5-flash-preview-05-20";
-        const apiKey = ""; // Canvas environment automatically provides this
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
+        
+        // *** ACTION REQUIRED: PASTE YOUR DEDICATED GEMINI API KEY HERE (from Cloud Console) ***
+        // THIS KEY MUST BE DIFFERENT FROM YOUR FIREBASE API KEY
+        const GEMINI_API_KEY = "AIzaSyCwAzcGGVqq1ZtL3Qi0dzqwDnH8V1NBiRQ"; 
+        
+        // Construct the API URL using the dedicated key
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${GEMINI_API_KEY}`;
+
 
         // --- Utility Functions ---
 
@@ -135,6 +141,12 @@
             profileStatus.innerHTML = '<span class="text-yellow-600 font-semibold">Loading and analyzing profile... (This may take a moment)</span>';
             loadBtn.disabled = true;
             playerProfileData = null; // Clear previous data
+            
+            if (GEMINI_API_KEY === "YOUR_GEMINI_API_KEY_HERE" || !GEMINI_API_KEY) {
+                 profileStatus.innerHTML = '<span class="text-red-500 font-semibold">API Key Missing: Please insert your Gemini API Key.</span>';
+                 loadBtn.disabled = false;
+                 return;
+            }
 
             // 1. System Instruction for extraction
             const systemInstruction = "You are a data extraction specialist. Your task is to visit the provided recruitment URL and extract the key athletic and academic details of the player. You must present the extracted data as a concise, formatted list of facts, ready to be inserted into an email.";
@@ -194,7 +206,14 @@
             const loadingIndicator = document.getElementById('loading-indicator');
             const searchButton = document.getElementById('search-button');
 
-            // 1. Initial UI Feedback
+            // 1. Check for API Key
+            if (GEMINI_API_KEY === "YOUR_GEMINI_API_KEY_HERE" || !GEMINI_API_KEY) {
+                 resultDiv.innerHTML = `<div class="p-6 bg-red-100 rounded-xl shadow-lg border border-red-400 text-red-700"><strong>API Key Error:</strong> Please insert your dedicated Gemini API Key into the code.</div>`;
+                 return;
+            }
+
+
+            // 2. Initial UI Feedback
             resultDiv.innerHTML = `<div class="p-4 text-center text-blue-600 bg-blue-50 rounded-lg">Starting search for ${schoolName}...</div>`;
             loadingIndicator.classList.remove('hidden');
             searchButton.disabled = true;
@@ -250,9 +269,17 @@
                 }
 
             } catch (error) {
-                // Scenario 1: Hard network failure or API error (e.g., 500, 400, 401)
+                // Scenario 1: Hard network failure or API error (e.g., 500, 400, 401, 403)
                 console.error("Gemini API/Network Error:", error);
-                resultDiv.innerHTML = `<div class="p-6 bg-red-100 rounded-xl shadow-lg border border-red-400 text-red-700"><strong>Connection Failed (Code 1):</strong> An error occurred while contacting the search service: ${error.message}</div>`;
+                
+                let userFriendlyError = `An error occurred while contacting the search service: ${error.message}`;
+
+                // Check specifically for 403 (Forbidden)
+                if (error.message.includes('403')) {
+                    userFriendlyError = `<strong>403 Forbidden Error:</strong> Your API key is likely restricted. **FIX:** Please generate a dedicated API Key for the Gemini service in the Google Cloud Console (APIs & Services -> Credentials) and paste it into the code.`;
+                }
+
+                resultDiv.innerHTML = `<div class="p-6 bg-red-100 rounded-xl shadow-lg border border-red-400 text-red-700"><strong>Connection Failed (Code 1):</strong> ${userFriendlyError}</div>`;
             } finally {
                 loadingIndicator.classList.add('hidden');
                 searchButton.disabled = false;
@@ -476,6 +503,14 @@
 
             emailStatus.innerHTML = '<p class="text-sm text-blue-600 font-semibold">Generating authentic email draft...</p>';
             generateBtn.disabled = true;
+            
+            // Check for API Key
+            if (GEMINI_API_KEY === "YOUR_GEMINI_API_KEY_HERE" || !GEMINI_API_KEY) {
+                 emailStatus.innerHTML = `<p class="text-sm text-red-500 font-semibold">API Key Error: Please insert your dedicated Gemini API Key into the code.</p>`;
+                 generateBtn.disabled = false;
+                 return;
+            }
+
 
             const schoolNames = selectedContacts.map(c => c.schoolName).join(', ');
             
@@ -588,7 +623,7 @@
                 firebaseConfig = JSON.parse(__firebase_config);
             } else {
                 // 2. Used when deployed publicly (Netlify, Vercel, etc.)
-                // *** IMPORTANT: YOUR UNIQUE FIREBASE PROJECT CONFIG IS NOW INSERTED BELOW ***
+                // *** YOUR UNIQUE FIREBASE PROJECT CONFIG IS USED BELOW FOR DATABASE ONLY ***
                 firebaseConfig = {
                     apiKey: "AIzaSyDgKqGsD8VZiUc83cJZlWdKt_2OIhw7b8Y", 
                     authDomain: "team-kansas.firebaseapp.com",
@@ -602,12 +637,13 @@
             
             const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-            // Check if the placeholder config is still empty/invalid
-            if (!firebaseConfig || firebaseConfig.apiKey === "YOUR_API_KEY") {
-                console.error("Firebase configuration not found or is still using placeholder values. Cannot initialize Firestore.");
-                document.getElementById('search-result').innerHTML = `<p class="text-red-500 font-bold p-4 bg-red-50 rounded-lg">CRITICAL ERROR: Firebase configuration is missing or invalid. Please follow the instructions to insert your project's credentials into the code.</p>`;
+            // Check for API Key placeholder (only check the old Firebase key if the new one is missing)
+            if (GEMINI_API_KEY === "YOUR_GEMINI_API_KEY_HERE" && firebaseConfig.apiKey === "AIzaSyDgKqGsD8VZiUc83cJZlWdKt_2OIhw7b8Y") {
+                console.error("Firebase configuration is missing or is using placeholder values. Cannot initialize Firestore.");
+                document.getElementById('search-result').innerHTML = `<p class="text-red-500 font-bold p-4 bg-red-50 rounded-lg">CRITICAL ERROR: Please insert your **new, dedicated Gemini API Key** (from the Cloud Console) into the code to fix the 403 error.</p>`;
                 return;
             }
+
 
             // Start Firebase App
             app = initializeApp(firebaseConfig);
