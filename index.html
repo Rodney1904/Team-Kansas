@@ -389,7 +389,7 @@
 
                     const groundingMetadata = candidate.groundingMetadata;
                     // FIX: This check is now correct
-                    if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                    if (groundingMetadata && groundingAttributions) {
                         sources = groundingMetadata.groundingAttributions
                             .map(attribution => ({
                                 uri: attribution.web?.uri,
@@ -675,16 +675,29 @@
                  emailStatus.innerHTML = '<p class="text-sm text-yellow-600 font-semibold">Generating draft using loaded API profile data...</p>';
             }
             
-            const schoolNames = selectedContacts.map(c => c.schoolName).join(', ');
-            
+            // --- NEW: Extract Coach Name and Full Contact List ---
+            const allSchoolsAndCoaches = selectedContacts.map(c => 
+                `${c.schoolName} (${c.coachName !== 'N/A' && c.coachName.length > 1 ? c.coachName : 'Coaching Staff'})`
+            ).join('; '); // Use semicolon for better separation in prompt
+
+            const firstContact = selectedContacts.length > 0 ? selectedContacts[0] : null;
+            let firstCoachName = 'Coach'; // Default if no coach found
+
+            if (firstContact && firstContact.coachName !== 'N/A' && firstContact.coachName.length > 1) {
+                // Use the first name for a casual, authentic touch
+                firstCoachName = firstContact.coachName.split(' ')[0]; 
+            }
+            // --- END NEW CONTACT EXTRACTION ---
+
+
             let profileContext = "";
             if (draftProfileContext) {
                 // If profile data exists (either manual, pasted, or API), use it
                 profileContext = `The player's key profile information is: ${draftProfileContext}. Use these details to personalize the email and make it sound authentic and impressive.`;
             }
 
-            // Updated prompt to include profile context
-            const userQuery = `Write a recruitment email from a 14-year-old softball player. ${profileContext} The email should be enthusiastic, polite, and mention her interest in the schools: ${schoolNames}. The output MUST be in two sections: "SUBJECT:" followed by the subject line, and "BODY:" followed by the email body. Use a conversational, slightly informal tone suitable for a motivated 14-year-old.`;
+            // Updated prompt to explicitly address the coach by name
+            const userQuery = `Write a recruitment email from a 14-year-old softball player. ${profileContext} The email should be enthusiastic, polite, and start with a personalized greeting addressing the head coach: "Dear Coach ${firstCoachName}". The email should also mention the player's interest in the other schools in the list. The full list of contacts for context is: ${allSchoolsAndCoaches}. The output MUST be in two sections: "SUBJECT:" followed by the subject line, and "BODY:" followed by the email body. Use a conversational, slightly informal tone suitable for a motivated 14-year-old.`;
             
             const systemInstruction = "You are a creative writing assistant specialized in crafting authentic, age-appropriate correspondence. You MUST structure your entire response with 'SUBJECT:' and 'BODY:' sections only. Do not add any other introductory or concluding text.";
 
