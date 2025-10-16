@@ -144,17 +144,29 @@
             const manualPositions = getMultiSelectValues('manual-positions') || 'N/A';
             const manualGPA = document.getElementById('manual-gpa').value.trim() || 'N/A';
             const manualTeam = document.getElementById('manual-team').value.trim() || 'Team Kansas Hays 14U';
+            const recruitingLink = document.getElementById('recruitment-link-input').value.trim(); // NEW
+            const clubCoachName = document.getElementById('club-coach-name').value.trim() || 'N/A'; // NEW
+            const clubCoachPhone = document.getElementById('club-coach-phone').value.trim() || 'N/A'; // NEW
+            const socialMedia = document.getElementById('social-media-input').value.trim() || 'N/A'; // NEW
 
-            const signatureBlock = `
 
----
-Sincerely,
-\n
-${manualName}
-${manualTeam}, Class of ${manualGradYear}
-Position(s): ${manualPositions}
-GPA: ${manualGPA}
-`;
+            let signatureBlock = `\n\n---\nSincerely,\n\n`;
+            
+            signatureBlock += `${manualName}\n`;
+            signatureBlock += `${manualTeam}, Class of ${manualGradYear}\n`;
+            signatureBlock += `Position(s): ${manualPositions}\n`;
+            signatureBlock += `GPA: ${manualGPA}\n`;
+            
+            if (recruitingLink) {
+                signatureBlock += `Profile Link: ${recruitingLink}\n`;
+            }
+            if (socialMedia !== 'N/A') {
+                signatureBlock += `Social Media: ${socialMedia}\n`;
+            }
+            if (clubCoachName !== 'N/A' || clubCoachPhone !== 'N/A') {
+                signatureBlock += `Club Coach: ${clubCoachName} (Phone: ${clubCoachPhone})\n`;
+            }
+
             return signatureBlock;
         }
 
@@ -194,6 +206,7 @@ GPA: ${manualGPA}
             const manualGradYear = document.getElementById('manual-grad-year').value.trim();
             const manualPositions = getMultiSelectValues('manual-positions'); 
             const manualGPA = document.getElementById('manual-gpa').value.trim();
+            const recruitingLink = document.getElementById('recruitment-link-input').value.trim(); // NEW: Link
             
             const profileStatus = document.getElementById('profile-status');
             const loadBtn = document.getElementById('load-profile-btn');
@@ -209,8 +222,8 @@ GPA: ${manualGPA}
             }
 
             // --- Priority 1: Manual Input Fields ---
-            if (manualName || manualTeam || manualGradYear || manualPositions || manualGPA) {
-                const manualSummary = `Player Name: ${manualName || 'N/A'}. Travel Team: ${manualTeam || 'N/A'}. Graduation Year: ${manualGradYear || 'N/A'}. Positions: ${manualPositions || 'N/A'}. GPA: ${manualGPA || 'N/A'}.`;
+            if (manualName || manualTeam || manualGradYear || manualPositions || manualGPA || recruitingLink) {
+                const manualSummary = `Player Name: ${manualName || 'N/A'}. Travel Team: ${manualTeam || 'N/A'}. Graduation Year: ${manualGradYear || 'N/A'}. Positions: ${manualPositions || 'N/A'}. GPA: ${manualGPA || 'N/A'}. Profile Link: ${recruitingLink || 'N/A'}.`;
                 
                 playerProfileData = manualSummary;
                 profileStatus.innerHTML = `
@@ -1096,21 +1109,35 @@ GPA: ${manualGPA}
                                 <option value="Infield">Infield</option>
                             </select>
                         </div>
+                        
+                        <!-- NEW Club Coach and Social Media Fields -->
+                        <div>
+                            <label for="club-coach-name" class="block text-sm font-medium text-gray-700 mb-1">Club Coach Name</label>
+                            <input type="text" id="club-coach-name" placeholder="e.g., Coach Anderson" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition duration-150 shadow-inner">
+                        </div>
+                        <div>
+                            <label for="club-coach-phone" class="block text-sm font-medium text-gray-700 mb-1">Club Coach Phone</label>
+                            <input type="tel" id="club-coach-phone" placeholder="e.g., (555) 123-4567" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition duration-150 shadow-inner">
+                        </div>
+                         <div class="col-span-2">
+                            <label for="social-media-input" class="block text-sm font-medium text-gray-700 mb-1">Social Media Handles (e.g., X, Instagram)</label>
+                            <input type="text" id="social-media-input" placeholder="e.g., @JaneDoe2028" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition duration-150 shadow-inner">
+                        </div>
                     </div>
 
-                    <!-- Copied Text/Manual Summary Input -->
+                    <!-- Option B: Copied Text/Manual Summary Input -->
                     <p class="text-lg font-semibold text-gray-800 mb-3 mt-6">Option B: Copy & Paste from Profile</p>
                     <div class="mb-4">
                         <label for="manual-profile-summary" class="block text-sm font-medium text-gray-700 mb-1">Paste Raw Stats/Text Here (AI will format it)</label>
                         <textarea id="manual-profile-summary" rows="4" placeholder="Copy and paste the player's key information (stats, GPA, positions) directly from the FieldLevel page into this box." class="w-full p-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition duration-150 shadow-inner"></textarea>
                     </div>
                     
-                    <!-- Fallback Search Input -->
-                    <p class="text-lg font-semibold text-gray-800 mb-3 mt-6">Option C: Fallback Name/URL Search (Unreliable for FieldLevel)</p>
+                    <!-- Option C: Dedicated Link Field -->
+                    <p class="text-lg font-semibold text-gray-800 mb-3 mt-6">Option C: Recruitment Link</p>
                     <div class="space-y-4">
                         <div>
-                            <label for="player-search-input" class="block text-sm font-medium text-gray-700 mb-1">Player's Full Name or Profile URL</label>
-                            <input type="text" id="player-search-input" placeholder="e.g., Kynser White (or paste full URL)" class="w-full p-3 border border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition duration-150 shadow-inner">
+                            <label for="recruitment-link-input" class="block text-sm font-medium text-gray-700 mb-1">FieldLevel/Recruitment Link (Added to Email Signature)</label>
+                            <input type="text" id="recruitment-link-input" placeholder="e.g., https://www.fieldlevel.com/app/profile/..." class="w-full p-3 border border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition duration-150 shadow-inner">
                         </div>
                     </div>
                 </div>
