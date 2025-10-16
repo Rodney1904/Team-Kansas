@@ -139,33 +139,43 @@
          * Generates a professional signature block from the current player profile data.
          */
         function generateSignature() {
-            const manualName = document.getElementById('manual-name').value.trim() || '[Player Name]';
-            const manualGradYear = document.getElementById('manual-grad-year').value.trim() || 'XXXX';
-            const manualPositions = getMultiSelectValues('manual-positions') || 'N/A';
-            const manualGPA = document.getElementById('manual-gpa').value.trim() || 'N/A';
-            const manualTeam = document.getElementById('manual-team').value.trim() || 'Team Kansas Hays 14U';
-            const recruitingLink = document.getElementById('recruitment-link-input').value.trim(); 
-            const clubCoachName = document.getElementById('club-coach-name').value.trim() || 'N/A'; 
-            const clubCoachPhone = document.getElementById('club-coach-phone').value.trim() || 'N/A'; 
-            const socialMedia = document.getElementById('social-media-input').value.trim() || 'N/A';
+            // Get data from input fields, defaulting to empty string if not found or blank
+            const manualName = document.getElementById('manual-name')?.value.trim() || '';
+            const manualGradYear = document.getElementById('manual-grad-year')?.value.trim() || '';
+            const manualPositions = getMultiSelectValues('manual-positions') || '';
+            const manualGPA = document.getElementById('manual-gpa')?.value.trim() || '';
+            const manualTeam = document.getElementById('manual-team')?.value.trim() || 'Team Kansas Hays 14U';
+            const recruitingLink = document.getElementById('recruitment-link-input')?.value.trim() || ''; 
+            const clubCoachName = document.getElementById('club-coach-name')?.value.trim() || ''; 
+            const clubCoachPhone = document.getElementById('club-coach-phone')?.value.trim() || ''; 
+            const socialMedia = document.getElementById('social-media-input')?.value.trim() || '';
             
-            // NEW Athletic Details
-            const birthdate = document.getElementById('birthdate-input').value.trim() || 'N/A';
-            const throwsHand = document.getElementById('throws-hand').value.trim() || 'N/A';
-            const batsHand = document.getElementById('bats-hand').value.trim() || 'N/A';
-            const slapHitter = document.getElementById('slap-hitter').value.trim() || 'N/A';
+            // NEW Athletic Details (Safely read values)
+            const birthdate = document.getElementById('birthdate-input')?.value.trim() || '';
+            const throwsHand = document.getElementById('throws-hand')?.value.trim() || '';
+            const batsHand = document.getElementById('bats-hand')?.value.trim() || '';
+            const slapHitter = document.getElementById('slap-hitter')?.value.trim() || 'No';
 
 
             let signatureBlock = `\n\n---\nSincerely,\n\n`;
             
-            signatureBlock += `${manualName}\n`;
-            signatureBlock += `${manualTeam}, Class of ${manualGradYear}\n`;
-            signatureBlock += `Position(s): ${manualPositions}\n`;
-            signatureBlock += `GPA: ${manualGPA}\n`;
+            signatureBlock += `${manualName || '[Player Name]'}\n`;
+            signatureBlock += `${manualTeam}, Class of ${manualGradYear || 'XXXX'}\n`;
+            signatureBlock += `Position(s): ${manualPositions || 'N/A'}\n`;
+            signatureBlock += `GPA: ${manualGPA || 'N/A'}\n`;
             
             // NEW Athletic Details
-            signatureBlock += `Birthdate: ${birthdate}\n`;
-            signatureBlock += `Throws: ${throwsHand} / Bats: ${batsHand}\n`;
+            if (birthdate) {
+                signatureBlock += `Birthdate: ${birthdate}\n`;
+            }
+            if (throwsHand && batsHand) {
+                signatureBlock += `Throws: ${throwsHand} / Bats: ${batsHand}\n`;
+            } else if (throwsHand) {
+                signatureBlock += `Throws: ${throwsHand}\n`;
+            } else if (batsHand) {
+                 signatureBlock += `Bats: ${batsHand}\n`;
+            }
+
             if (slapHitter === 'Yes') {
                 signatureBlock += `Slap Hitter: Yes\n`;
             }
@@ -173,11 +183,15 @@
             if (recruitingLink) {
                 signatureBlock += `Profile Link: ${recruitingLink}\n`;
             }
-            if (socialMedia !== 'N/A') {
+            if (socialMedia) {
                 signatureBlock += `Social Media: ${socialMedia}\n`;
             }
-            if (clubCoachName !== 'N/A' || clubCoachPhone !== 'N/A') {
-                signatureBlock += `Club Coach: ${clubCoachName} (Phone: ${clubCoachPhone})\n`;
+            if (clubCoachName || clubCoachPhone) {
+                let coachLine = `Club Coach: ${clubCoachName || 'N/A'}`;
+                if (clubCoachPhone) {
+                    coachLine += ` (Phone: ${clubCoachPhone})`;
+                }
+                signatureBlock += `${coachLine}\n`;
             }
 
             return signatureBlock;
