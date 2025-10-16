@@ -25,6 +25,9 @@
         let selectedContacts = []; // List of contacts for the email blast
         let playerProfileData = null; // Global storage for profile data (NEW)
         let activeProfileTab = 'data'; // State for the new tabbed interface
+        let currentSearchStatus = 'New Lead'; // Default status for new searches
+        let currentTeamNotes = ''; // Default notes for new searches
+
 
         // LLM Configuration - Stable Text Generation
         const MODEL_NAME = "gemini-2.5-flash-preview-05-20";
@@ -130,6 +133,29 @@
                     await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }
+        }
+
+        /**
+         * Generates a professional signature block from the current player profile data.
+         */
+        function generateSignature() {
+            const manualName = document.getElementById('manual-name').value.trim() || '[Player Name]';
+            const manualGradYear = document.getElementById('manual-grad-year').value.trim() || 'XXXX';
+            const manualPositions = getMultiSelectValues('manual-positions') || 'N/A';
+            const manualGPA = document.getElementById('manual-gpa').value.trim() || 'N/A';
+            const manualTeam = document.getElementById('manual-team').value.trim() || 'Team Kansas Hays 14U';
+
+            const signatureBlock = `
+
+---
+Sincerely,
+\n
+${manualName}
+${manualTeam}, Class of ${manualGradYear}
+Position(s): ${manualPositions}
+GPA: ${manualGPA}
+`;
+            return signatureBlock;
         }
 
         // --- NEW: Tabbed Interface Logic ---
@@ -351,9 +377,15 @@
                  resultDiv.innerHTML = `<div class="p-6 bg-red-100 rounded-xl shadow-lg border border-red-400 text-red-700"><strong>API Key Error:</strong> Please insert your dedicated Gemini API Key into the code.</div>`;
                  return;
             }
+            
+            // 2. Clear out any previous status/notes before new search
+            currentSearchStatus = 'New Lead';
+            currentTeamNotes = '';
+            document.getElementById('internal-notes').value = ''; // Clear notes input
+            document.getElementById('recruitment-status').value = 'New Lead'; // Reset status dropdown
 
 
-            // 2. Initial UI Feedback
+            // 3. Initial UI Feedback
             resultDiv.innerHTML = `<div class="p-4 text-center text-blue-600 bg-blue-50 rounded-lg">Starting search for ${schoolName}...</div>`;
             loadingIndicator.classList.remove('hidden');
             searchButton.disabled = true;
@@ -399,7 +431,7 @@
                     }
 
                     // Save the raw text response and sources to Firestore
-                    await saveSearchResult(schoolName, userQuery, responseText, sources);
+                    await saveSearchResult(schoolName, userQuery, responseText, sources, currentSearchStatus, currentTeamNotes);
 
                     displaySearchResult(schoolName, responseText, sources, 'blue');
 
@@ -427,6 +459,31 @@
                 searchButton.textContent = 'Search School';
             }
         }
+        
+        // --- Status Utilities ---
+
+        function getStatusColor(status) {
+            switch(status) {
+                case 'Initial Email Sent': return 'bg-blue-200 text-blue-800';
+                case 'Follow-Up Required': return 'bg-amber-200 text-amber-800';
+                case 'Coach Response Received': return 'bg-green-200 text-green-800';
+                case 'Dormant / Not a Fit': return 'bg-red-200 text-red-800';
+                case 'New Lead':
+                default: return 'bg-gray-200 text-gray-800';
+            }
+        }
+
+        function getStatusIcon(status) {
+            switch(status) {
+                case 'Initial Email Sent': return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>`;
+                case 'Follow-Up Required': return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+                case 'Coach Response Received': return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>`;
+                case 'Dormant / Not a Fit': return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`;
+                case 'New Lead':
+                default: return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>`;
+            }
+        }
+
 
         /**
          * Renders the search result to the UI using simple Markdown and adds the email button.
@@ -439,6 +496,10 @@
             
             // Use marked.js to convert the plain text (which is naturally Markdown) to HTML
             const formattedContent = marked.parse(responseText);
+            
+            // Initial load values for status and notes (used when a saved result is displayed)
+            const initialStatus = currentSearchStatus || 'New Lead';
+            const initialNotes = currentTeamNotes || '';
 
             resultDiv.innerHTML = `
                 <div class="p-8 bg-white border border-${borderColor}-200 rounded-2xl shadow-xl">
@@ -449,6 +510,28 @@
                     </div>
 
                     ${formatCitations(sources)}
+                    
+                    <div class="mt-6 pt-4 border-t border-gray-100 space-y-4">
+                        <h4 class="text-lg font-semibold text-gray-700">Team Tracking Data</h4>
+                        
+                        <!-- Recruitment Status Dropdown -->
+                        <div>
+                            <label for="recruitment-status" class="block text-sm font-medium text-gray-700 mb-1">Recruitment Status:</label>
+                            <select id="recruitment-status" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150 shadow-inner">
+                                <option value="New Lead">New Lead</option>
+                                <option value="Initial Email Sent">Initial Email Sent</option>
+                                <option value="Follow-Up Required">Follow-Up Required</option>
+                                <option value="Coach Response Received">Coach Response Received</option>
+                                <option value="Dormant / Not a Fit">Dormant / Not a Fit</option>
+                            </select>
+                        </div>
+
+                        <!-- Internal Team Notes -->
+                        <div>
+                            <label for="internal-notes" class="block text-sm font-medium text-gray-700 mb-1">Internal Team Notes (Private):</label>
+                            <textarea id="internal-notes" rows="3" placeholder="Add private notes about contact, interest level, or next steps..." class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150 shadow-inner resize-none"></textarea>
+                        </div>
+                    </div>
 
                     <button id="add-contact-btn" class="mt-6 w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 rounded-lg transition duration-150 shadow-md disabled:opacity-50 transform hover:translate-y-[-1px]"
                         ${contactInfo.email === 'N/A' || !contactInfo.email.includes('@') ? 'disabled' : ''}>
@@ -457,6 +540,15 @@
                 </div>
             `;
             
+            // Set initial values for status and notes from history or default
+            document.getElementById('recruitment-status').value = initialStatus;
+            document.getElementById('internal-notes').value = initialNotes;
+
+            // Update global tracking variables whenever status/notes change in the UI
+            document.getElementById('recruitment-status').addEventListener('change', (e) => currentSearchStatus = e.target.value);
+            document.getElementById('internal-notes').addEventListener('input', (e) => currentTeamNotes = e.target.value);
+
+
             // Add click listener for the new button
             if (contactInfo.email.includes('@')) {
                 const contact = {
@@ -475,7 +567,7 @@
         /**
          * Saves the search result to a public Firestore collection.
          */
-        async function saveSearchResult(schoolName, query, responseText, sources) {
+        async function saveSearchResult(schoolName, query, responseText, sources, status, notes) {
             if (!db || !userId) {
                 console.error("Firestore not initialized or user not logged in.");
                 return;
@@ -488,7 +580,9 @@
                     responseText: responseText, // Store the raw text response
                     sources: sources,
                     timestamp: serverTimestamp(),
-                    addedByUserId: userId 
+                    addedByUserId: userId,
+                    status: status, // NEW
+                    notes: notes    // NEW
                 });
                 console.log("Search result successfully saved to public Firestore collection.");
             } catch (e) {
@@ -520,11 +614,21 @@
                 const displayId = search.addedByUserId ? search.addedByUserId.substring(0, 4) : 'Unknown';
                 const isMySearch = search.addedByUserId === userId ? ' (You)' : '';
                 const borderColor = search.addedByUserId === userId ? 'border-amber-400' : 'border-gray-200';
+                
+                const statusColorClass = getStatusColor(search.status);
+                const statusIconSvg = getStatusIcon(search.status);
+                const statusText = search.status || 'New Lead';
 
 
                 return `
                     <div class="p-3 bg-white hover:bg-gray-50 transition duration-150 ease-in-out rounded-xl shadow-md border-l-4 ${borderColor} mb-2 cursor-pointer" onclick="displaySavedResult('${search.id}')">
-                        <p class="font-semibold text-blue-700">${search.schoolName}</p>
+                        <div class="flex justify-between items-start">
+                            <p class="font-semibold text-blue-700">${search.schoolName}</p>
+                            <span class="flex items-center text-xs px-2 py-0.5 rounded-full ${statusColorClass} ml-2 whitespace-nowrap">
+                                ${statusIconSvg}
+                                <span class="ml-1">${statusText}</span>
+                            </span>
+                        </div>
                         <p class="text-xs text-gray-500">By: <span class="font-mono text-gray-700">${displayId}</span>${isMySearch} | ${date}</p>
                     </div>
                 `;
@@ -570,6 +674,10 @@
             const search = allSearches.find(s => s.id === id);
 
             if (search) {
+                // Update global status/notes for display
+                currentSearchStatus = search.status || 'New Lead';
+                currentTeamNotes = search.notes || '';
+                
                 displaySearchResult(search.schoolName, search.responseText, search.sources, 'amber');
             }
         };
@@ -675,7 +783,7 @@
                  emailStatus.innerHTML = '<p class="text-sm text-yellow-600 font-semibold">Generating draft using loaded API profile data...</p>';
             }
             
-            // --- NEW: Extract Coach Name and Full Contact List ---
+            // --- EXTRACT CONTACTS & COACH NAME ---
             const allSchoolsAndCoaches = selectedContacts.map(c => 
                 `${c.schoolName} (${c.coachName !== 'N/A' && c.coachName.length > 1 ? c.coachName : 'Coaching Staff'})`
             ).join('; '); // Use semicolon for better separation in prompt
@@ -687,7 +795,7 @@
                 // Use the first name for a casual, authentic touch
                 firstCoachName = firstContact.coachName.split(' ')[0]; 
             }
-            // --- END NEW CONTACT EXTRACTION ---
+            // --- END CONTACT EXTRACTION ---
 
 
             let profileContext = "";
@@ -720,7 +828,7 @@
                     console.log("Raw Gemini Draft Response:", result);
                 }
                 
-                const responseText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                let responseText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
                 
                 if (responseText) {
                     // Manually parse SUBJECT and BODY from the plain text
@@ -728,7 +836,12 @@
                     const bodyMatch = responseText.match(/BODY:\s*([\s\S]*)/i);
 
                     const subject = subjectMatch ? subjectMatch[1].trim() : "Recruiting Inquiry";
-                    const body = bodyMatch ? bodyMatch[1].trim() : "Could not generate email body.";
+                    let body = bodyMatch ? bodyMatch[1].trim() : "Could not generate email body.";
+                    
+                    // --- NEW: Append Dynamic Signature ---
+                    if (body !== "Could not generate email body.") {
+                        body += generateSignature();
+                    }
                     
                     draftSubjectInput.value = subject;
                     draftBodyInput.value = body;
