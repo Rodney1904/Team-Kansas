@@ -891,7 +891,9 @@
         <h1 class="text-4xl font-extrabold text-blue-800 tracking-tight mb-2">
             Team Kansas Hays 14U Recruitment Tracker
         </h1>
-        <p class="text-xl text-gray-600">Find Coach Contacts and Recruitment Links for Team Kansas Athletes, Powered by Gemini</p>
+        <p class="text-xl text-gray-600">
+            This tool helps your athlete efficiently find coach contact information and generate personalized, age-appropriate outreach emails in minutes.
+        </p>
         <p id="user-id-display" class="text-xs text-gray-400 mt-2 break-all"></p> 
     </header>
 
@@ -906,6 +908,9 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-3 text-amber-500"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                     Step 1: Get Player Data Ready
                 </h2>
+                <p class="text-gray-600 mb-6 border-b border-gray-100 pb-4">
+                    Fill out the player's key details or paste their profile summary. This information is **required** to generate a highly personalized email draft that grabs a coach's attention.
+                </p>
 
                 <!-- Tabbed Navigation -->
                 <div class="flex border-b border-amber-200 mb-6">
@@ -954,12 +959,6 @@
                                 <option value="3.3">3.3</option>
                                 <option value="3.2">3.2</option>
                                 <option value="3.1">3.1</option>
-                                <option value="3.0">3.0</option>
-                                <option value="2.9">2.9</option>
-                                <option value="2.8">2.8</option>
-                                <option value="2.7">2.7</option>
-                                <option value="2.6">2.6</option>
-                                <option value="2.5">2.5</option>
                             </select>
                         </div>
                         <div class="col-span-2">
@@ -1015,6 +1014,9 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-3 text-blue-600"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     Step 2: Find Coach Contact Info
                 </h2>
+                <p class="text-gray-600 mb-6 border-b border-gray-100 pb-4">
+                    Use our real-time search to find the Head Coach's contact details and official recruiting links. All successful searches are **automatically shared** with the rest of the Team Kansas Hays 14U roster (right panel).
+                </p>
                 <form id="search-form" class="space-y-6">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -1057,6 +1059,9 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-3 text-blue-600"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
                     Step 3: Generate & Send Email Blast (<span id="contact-count">0</span> Contacts)
                 </h2>
+                <p class="text-gray-600 mb-6 border-b border-gray-100 pb-4">
+                    The AI combines the **player's profile data** (Step 1) with the **coach contacts** you add (Step 2) to generate a unique, authentic draft in the player's voice.
+                </p>
 
                 <div class="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
                     <p class="font-semibold text-blue-800 mb-2">Selected Contacts:</p>
@@ -1080,7 +1085,7 @@
 
                 <div class="grid grid-cols-2 gap-4 mt-6">
                     <button id="generate-draft-btn" disabled class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded-lg shadow-lg transition duration-300 transform hover:translate-y-[-1px] disabled:opacity-50">
-                        Generate 14-Year-Old Draft
+                        Generate Email Draft
                     </button>
                     <button onclick="sendEmailBlast()" id="send-email-btn" disabled class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg shadow-lg transition duration-300 transform hover:translate-y-[-1px] disabled:opacity-50">
                         Send Email Blast
