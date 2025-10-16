@@ -56,24 +56,41 @@
 
         /**
          * Parses the coach name and email from the raw text response.
+         * FIX: Enhanced email extraction to look for generic email patterns if the labeled field is missing.
          */
         function extractEmailAndName(responseText) {
             const result = { coachName: 'N/A', email: 'N/A' };
             
-            // Regex to find Email: or Coach Name: lines in the text response
-            const emailMatch = responseText.match(/Email:\s*(.*?)(?:\n|$)/i);
-            if (emailMatch && emailMatch[1]) {
-                const email = emailMatch[1].trim().replace(/['"`]/g, ''); // Clean up quotes
-                if (email !== 'N/A' && email.includes('@')) {
-                    result.email = email;
-                }
-            }
-
+            // 1. Try to find Coach Name labeled clearly
             const nameMatch = responseText.match(/Coach Name:\s*(.*?)(?:\n|$)/i);
             if (nameMatch && nameMatch[1]) {
                 const name = nameMatch[1].trim().replace(/['"`]/g, ''); // Clean up quotes
                 if (name !== 'N/A') {
                     result.coachName = name;
+                }
+            }
+
+            // 2. Try to find Email labeled clearly
+            let emailMatch = responseText.match(/Email:\s*(.*?)(?:\n|$)/i);
+            
+            if (emailMatch && emailMatch[1]) {
+                const labeledEmail = emailMatch[1].trim().replace(/['"`]/g, ''); // Clean up quotes
+                if (labeledEmail !== 'N/A' && labeledEmail.includes('@')) {
+                    result.email = labeledEmail;
+                    return result; // If we found the labeled email, we are done.
+                }
+            }
+
+            // 3. FALLBACK: Scan the entire response for any pattern that looks like an email address
+            const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/;
+            const generalEmailMatch = responseText.match(emailRegex);
+
+            if (generalEmailMatch && generalEmailMatch[0]) {
+                const foundEmail = generalEmailMatch[0].trim();
+                // Ensure the found email isn't just a part of a generic message
+                if (foundEmail.length > 5 && foundEmail.includes('@')) {
+                    result.email = foundEmail;
+                    // Note: Coach name might still be 'N/A' here, but the email is critical.
                 }
             }
 
