@@ -144,10 +144,16 @@
             const manualPositions = getMultiSelectValues('manual-positions') || 'N/A';
             const manualGPA = document.getElementById('manual-gpa').value.trim() || 'N/A';
             const manualTeam = document.getElementById('manual-team').value.trim() || 'Team Kansas Hays 14U';
-            const recruitingLink = document.getElementById('recruitment-link-input').value.trim(); // NEW
-            const clubCoachName = document.getElementById('club-coach-name').value.trim() || 'N/A'; // NEW
-            const clubCoachPhone = document.getElementById('club-coach-phone').value.trim() || 'N/A'; // NEW
-            const socialMedia = document.getElementById('social-media-input').value.trim() || 'N/A'; // NEW
+            const recruitingLink = document.getElementById('recruitment-link-input').value.trim(); 
+            const clubCoachName = document.getElementById('club-coach-name').value.trim() || 'N/A'; 
+            const clubCoachPhone = document.getElementById('club-coach-phone').value.trim() || 'N/A'; 
+            const socialMedia = document.getElementById('social-media-input').value.trim() || 'N/A';
+            
+            // NEW Athletic Details
+            const birthdate = document.getElementById('birthdate-input').value.trim() || 'N/A';
+            const throwsHand = document.getElementById('throws-hand').value.trim() || 'N/A';
+            const batsHand = document.getElementById('bats-hand').value.trim() || 'N/A';
+            const slapHitter = document.getElementById('slap-hitter').value.trim() || 'N/A';
 
 
             let signatureBlock = `\n\n---\nSincerely,\n\n`;
@@ -156,6 +162,13 @@
             signatureBlock += `${manualTeam}, Class of ${manualGradYear}\n`;
             signatureBlock += `Position(s): ${manualPositions}\n`;
             signatureBlock += `GPA: ${manualGPA}\n`;
+            
+            // NEW Athletic Details
+            signatureBlock += `Birthdate: ${birthdate}\n`;
+            signatureBlock += `Throws: ${throwsHand} / Bats: ${batsHand}\n`;
+            if (slapHitter === 'Yes') {
+                signatureBlock += `Slap Hitter: Yes\n`;
+            }
             
             if (recruitingLink) {
                 signatureBlock += `Profile Link: ${recruitingLink}\n`;
@@ -1065,10 +1078,14 @@
                 <div id="profile-data-content">
                     <p class="text-lg font-semibold text-gray-800 mb-3">Option A: Fill out Form (Highest Priority)</p>
                     <div class="grid grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                        <!-- Manual Input Fields -->
+                        <!-- Manual Input Fields - Row 1 & 2 -->
                         <div>
                             <label for="manual-name" class="block text-sm font-medium text-gray-700 mb-1">Full Name (Required)</label>
                             <input type="text" id="manual-name" placeholder="e.g., Jane Doe" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition duration-150 shadow-inner">
+                        </div>
+                        <div>
+                            <label for="birthdate-input" class="block text-sm font-medium text-gray-700 mb-1">Birthdate</label>
+                            <input type="date" id="birthdate-input" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition duration-150 shadow-inner">
                         </div>
                         <div>
                             <label for="manual-team" class="block text-sm font-medium text-gray-700 mb-1">Travel Ball Team</label>
@@ -1084,6 +1101,34 @@
                                 <option value="2027">2027</option>
                             </select>
                         </div>
+                        
+                        <!-- NEW Athletic Handedness Fields -->
+                        <div>
+                            <label for="throws-hand" class="block text-sm font-medium text-gray-700 mb-1">Throws Handedness</label>
+                            <select id="throws-hand" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition duration-150 shadow-inner">
+                                <option value="">Select</option>
+                                <option value="Right">Right</option>
+                                <option value="Left">Left</option>
+                            </select>
+                        </div>
+                         <div>
+                            <label for="bats-hand" class="block text-sm font-medium text-gray-700 mb-1">Bats Handedness</label>
+                            <select id="bats-hand" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition duration-150 shadow-inner">
+                                <option value="">Select</option>
+                                <option value="Right">Right</option>
+                                <option value="Left">Left</option>
+                                <option value="Switch">Switch</option>
+                            </select>
+                        </div>
+                        
+                         <div>
+                            <label for="slap-hitter" class="block text-sm font-medium text-gray-700 mb-1">Slap Hitter</label>
+                            <select id="slap-hitter" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition duration-150 shadow-inner">
+                                <option value="No">No</option>
+                                <option value="Yes">Yes</option>
+                            </select>
+                        </div>
+
                         <div>
                             <label for="manual-gpa" class="block text-sm font-medium text-gray-700 mb-1">GPA</label>
                             <select id="manual-gpa" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition duration-150 shadow-inner">
@@ -1110,7 +1155,7 @@
                             </select>
                         </div>
                         
-                        <!-- NEW Club Coach and Social Media Fields -->
+                        <!-- Club Coach and Social Media Fields -->
                         <div>
                             <label for="club-coach-name" class="block text-sm font-medium text-gray-700 mb-1">Club Coach Name</label>
                             <input type="text" id="club-coach-name" placeholder="e.g., Coach Anderson" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition duration-150 shadow-inner">
@@ -1126,9 +1171,9 @@
                     </div>
 
                     <!-- Option B: Copied Text/Manual Summary Input -->
-                    <p class="text-lg font-semibold text-gray-800 mb-3 mt-6">Option B: Copy & Paste from Profile</p>
+                    <p class="text-lg font-semibold text-gray-800 mb-3 mt-6">Option B: Copy & Paste from Profile (AI will format it)</p>
                     <div class="mb-4">
-                        <label for="manual-profile-summary" class="block text-sm font-medium text-gray-700 mb-1">Paste Raw Stats/Text Here (AI will format it)</label>
+                        <label for="manual-profile-summary" class="block text-sm font-medium text-gray-700 mb-1">Paste Raw Stats/Text Here</label>
                         <textarea id="manual-profile-summary" rows="4" placeholder="Copy and paste the player's key information (stats, GPA, positions) directly from the FieldLevel page into this box." class="w-full p-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition duration-150 shadow-inner"></textarea>
                     </div>
                     
