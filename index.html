@@ -388,8 +388,8 @@
                     let sources = [];
 
                     const groundingMetadata = candidate.groundingMetadata;
-                    // FIX: This check is now correct
-                    if (groundingMetadata && groundingAttributions) {
+                    // FIX: This check is now CORRECTED to prevent "groundingAttributions is not defined" error
+                    if (groundingMetadata && groundingMetadata.groundingAttributions) {
                         sources = groundingMetadata.groundingAttributions
                             .map(attribution => ({
                                 uri: attribution.web?.uri,
