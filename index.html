@@ -421,8 +421,13 @@
             // 2. Clear out any previous status/notes before new search
             currentSearchStatus = 'New Lead';
             currentTeamNotes = '';
-            document.getElementById('internal-notes').value = ''; // Clear notes input
-            document.getElementById('recruitment-status').value = 'New Lead'; // Reset status dropdown
+            
+            // FIX: Safely accessing elements before they exist in the DOM
+            const internalNotesEl = document.getElementById('internal-notes');
+            const statusEl = document.getElementById('recruitment-status');
+
+            if (internalNotesEl) internalNotesEl.value = '';
+            if (statusEl) statusEl.value = 'New Lead';
 
 
             // 3. Initial UI Feedback
@@ -1005,20 +1010,32 @@
                 }
             });
 
-            document.getElementById('search-form').addEventListener('submit', function(e) {
-                e.preventDefault();
-                const schoolName = document.getElementById('school-name').value.trim();
-                if (schoolName) {
-                    fetchRecruitingInfo(schoolName);
-                } else {
-                    document.getElementById('search-result').innerHTML = `<p class="text-yellow-600 p-4 bg-yellow-100 rounded-lg">Please enter a school name to search!</p>`;
-                }
-            });
-
-            document.getElementById('generate-draft-btn').addEventListener('click', generateEmailDraft);
+            // *** FIX IMPLEMENTED HERE ***: Ensure the form and button exist before attaching the listener
+            const searchForm = document.getElementById('search-form');
+            if (searchForm) {
+                searchForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const schoolName = document.getElementById('school-name')?.value.trim();
+                    if (schoolName) {
+                        fetchRecruitingInfo(schoolName);
+                    } else {
+                        document.getElementById('search-result').innerHTML = `<p class="text-yellow-600 p-4 bg-yellow-100 rounded-lg">Please enter a school name to search!</p>`;
+                    }
+                });
+            } else {
+                 console.error("CRITICAL: Search form element not found.");
+            }
             
-            // NEW: Profile button listener
-            document.getElementById('load-profile-btn').addEventListener('click', loadPlayerProfile);
+            const generateDraftBtn = document.getElementById('generate-draft-btn');
+            if (generateDraftBtn) {
+                 generateDraftBtn.addEventListener('click', generateEmailDraft);
+            }
+            
+            const loadProfileBtn = document.getElementById('load-profile-btn');
+            if (loadProfileBtn) {
+                 loadProfileBtn.addEventListener('click', loadPlayerProfile);
+            }
+            
 
             // Initialize the tab view
             changeProfileTab(activeProfileTab);
